@@ -6,12 +6,9 @@ from torch.autograd import Variable
 
 minW = config.minW 
 minH = config.minH
-scale0 = config.scale0
-scale1 = config.scale1
-scale2 = config.scale2
+scale = config.scale
 
-ratio_of_hw = config.ratio_of_hw
-nRoIFeature = config.nRoIFeature
+nRoIFeature = sum(scale) 
 
 class BidirectionalLSTM(nn.Module):
 
@@ -93,28 +90,24 @@ class CRNN(nn.Module):
         b, c, h, w = conv.size()
         print(conv.size())
 
-        h0 = int(max(minH, ((h+scale2-1)//scale2)*scale2))
+        h0 = int(max(minH, ((h+scale[3]-1)//scale[3])*scale[3]))
         #print('h0   :  '+str(h0))
-        w0 = int(max(minW, ((h0 // ratio_of_hw +scale2-1 )//scale2)*scale2  ))
-        #print('w0   :  '+str(w0))
-
-        n = int((w+w0-1)//w0)
-        #print('n   :  '+str(n))
-
         
-        conv1 = Variable(torch.zeros(b,c,h0,w0*n)).cuda()
-        conv1[:,:,0:h,0:w] = conv
-        conv1 = conv1.view(b,c,h0,w0,n)
+        conv0 = Variable(torch.zeros(b,c,h0,w)).cuda()
+        conv0[:,:,0:h,:] = conv
+        #conv0 = conv0.view(b,c,h0,w)
         
-        roi0 = nn.MaxPool3d((h0,w0,1))(conv1)
-        roi1 = nn.MaxPool3d((h0//2, w0//2, 1))(conv1)
-        roi2 = nn.MaxPool3d((h0//4, w0//4, 1))(conv1)
+        roi0 = nn.MaxPool2d((h0//scale[0],w//scale[0]))(conv0)
+        roi1 = nn.MaxPool2d((h0//scale[1],w//scale[1]))(conv0)
+        roi2 = nn.MaxPool2d((h0//scale[2],w//scale[2]))(conv0)
+        roi3 = nn.MaxPool2d((h0//scale[3],w//scale[3]))(conv0)
         #print(roi2.size())
-        roi0 = roi0.view(b,c,scale0**2,n).permute(0,1,3,2)
-        roi1 = roi1.view(b,c,scale1**2,n).permute(0,1,3,2)
-        roi2 = roi2.view(b,c,scale2**2,n).permute(0,1,3,2)
+        roi0 = roi0.permute(0,1,3,2)
+        roi1 = roi1.permute(0,1,3,2)
+        roi2 = roi2.permute(0,1,3,2)
+        roi3 = roi3.permute(0,1,3,2)
         
-        roi = torch.cat((roi0,roi1,roi2),3)    #(b,c,n,nRoIFeature = 21)
+        roi = torch.cat((roi0,roi1,roi2,roi3),3)    #(b,c,n,nRoIFeature = 21)
         
         conv = self.fc(roi)    #(b,c,n,1)
 
